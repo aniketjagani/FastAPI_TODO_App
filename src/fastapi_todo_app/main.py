@@ -14,7 +14,10 @@ import logging
 
 from .api.v1.api import api_router
 from .core.config import settings
-from .db.database import create_tables
+from .db.database import create_tables  # SQLite for TODOs
+from .employees.db.database import (
+    create_tables as create_employee_tables,
+)  # PostgreSQL for Employees
 from .schemas.todo import TodoStats
 
 
@@ -29,10 +32,15 @@ async def lifespan(app: FastAPI):
     Application lifespan handler for startup and shutdown events
     """
     # Startup
-    logger.info("🚀 Starting FastAPI TODO Application with Pydantic models")
+    logger.info("🚀 Starting FastAPI TODO & Employee Application with Pydantic models")
     try:
+        # Create SQLite tables for TODOs
         create_tables()
-        logger.info("✅ Database tables created successfully")
+        logger.info("✅ SQLite TODO tables created successfully")
+
+        # Create PostgreSQL tables for Employees
+        create_employee_tables()
+        logger.info("✅ PostgreSQL Employee tables created successfully")
     except Exception as e:
         logger.error(f"❌ Error creating database tables: {e}")
         raise
@@ -48,17 +56,19 @@ def create_application() -> FastAPI:
     Create and configure the enhanced FastAPI application with Pydantic integration.
     """
     app = FastAPI(
-        title=settings.PROJECT_NAME,
+        title="FastAPI TODO & Employee Management System",
         description="""
-        ## Enhanced TODO Application with Pydantic Models 🚀
+        ## Enhanced TODO & Employee Management with Pydantic Models 🚀
         
-        A comprehensive TODO management system built with:
-        - **FastAPI** for high-performance API
-        - **Pydantic** for data validation and serialization
+        A comprehensive dual-application system built with:
+        - **FastAPI** for high-performance APIs
+        - **Pydantic V2** for data validation and serialization
         - **SQLAlchemy** for database operations
+        - **PostgreSQL** for employee data
+        - **SQLite** for TODO data
         - **UV** for modern Python package management
         
-        ### Features:
+        ### TODO Features:
         - ✅ Full CRUD operations for todos
         - 🏷️ Advanced filtering and search
         - 📊 Statistics and analytics
@@ -66,7 +76,15 @@ def create_application() -> FastAPI:
         - 📅 Due date tracking
         - 🏷️ Tag-based organization
         - 📦 Bulk operations
-        - 🔍 Advanced search capabilities
+
+        ### Employee Features:
+        - 👥 Complete employee management
+        - 🏢 Department-based organization
+        - 💰 Salary and compensation tracking
+        - 📈 Employment status management
+        - 👨‍💼 Manager-employee relationships
+        - 🔍 Advanced search and filtering
+        - 📊 Employee statistics and analytics
         
         ### API Documentation:
         - **Swagger UI**: Available at `/docs`
@@ -99,7 +117,7 @@ def create_application() -> FastAPI:
     if settings.BACKEND_CORS_ORIGINS:
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+            allow_origins=settings.get_cors_origins(),
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
