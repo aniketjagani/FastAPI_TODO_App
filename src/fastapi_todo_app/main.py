@@ -1,32 +1,101 @@
 """
-FastAPI TODO Application Entry Point
+Enhanced FastAPI TODO Application Entry Point with Pydantic Integration
 """
 
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
+import time
+import logging
 
 from .api.v1.api import api_router
 from .core.config import settings
 from .db.database import create_tables
+from .schemas.todo import TodoStats
 
-# Create database tables on startup
-create_tables()
+
+# Configure logging
+logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifespan handler for startup and shutdown events
+    """
+    # Startup
+    logger.info("🚀 Starting FastAPI TODO Application with Pydantic models")
+    try:
+        create_tables()
+        logger.info("✅ Database tables created successfully")
+    except Exception as e:
+        logger.error(f"❌ Error creating database tables: {e}")
+        raise
+
+    yield
+
+    # Shutdown
+    logger.info("👋 Shutting down FastAPI TODO Application")
 
 
 def create_application() -> FastAPI:
     """
-    Create and configure the FastAPI application.
+    Create and configure the enhanced FastAPI application with Pydantic integration.
     """
     app = FastAPI(
         title=settings.PROJECT_NAME,
-        description="A TODO application built with FastAPI",
+        description="""
+        ## Enhanced TODO Application with Pydantic Models 🚀
+        
+        A comprehensive TODO management system built with:
+        - **FastAPI** for high-performance API
+        - **Pydantic** for data validation and serialization
+        - **SQLAlchemy** for database operations
+        - **UV** for modern Python package management
+        
+        ### Features:
+        - ✅ Full CRUD operations for todos
+        - 🏷️ Advanced filtering and search
+        - 📊 Statistics and analytics
+        - 🎯 Priority and status management  
+        - 📅 Due date tracking
+        - 🏷️ Tag-based organization
+        - 📦 Bulk operations
+        - 🔍 Advanced search capabilities
+        
+        ### API Documentation:
+        - **Swagger UI**: Available at `/docs`
+        - **ReDoc**: Available at `/redoc`
+        """,
         version=settings.VERSION,
         openapi_url=f"{settings.API_V1_STR}/openapi.json",
         docs_url="/docs",
         redoc_url="/redoc",
+        lifespan=lifespan,
     )
 
-    # Set all CORS enabled origins
+    # Add security middleware
+    if settings.ENVIRONMENT == "production":
+        app.add_middleware(
+            TrustedHostMiddleware,
+            allowed_hosts=["localhost", "127.0.0.1", "*.herokuapp.com"],
+        )
+
+    # Add timing middleware for performance monitoring
+    @app.middleware("http")
+    async def add_process_time_header(request: Request, call_next):
+        start_time = time.time()
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        response.headers["X-Process-Time"] = str(process_time)
+        return response
+
+    # Set CORS middleware
     if settings.BACKEND_CORS_ORIGINS:
         app.add_middleware(
             CORSMiddleware,
@@ -34,6 +103,35 @@ def create_application() -> FastAPI:
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
+        )
+
+    # Custom exception handlers for better error messages
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ):
+        """Handle Pydantic validation errors"""
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "detail": "Validation Error",
+                "errors": exc.errors(),
+                "message": "Please check your request data and try again.",
+            },
+        )
+
+    @app.exception_handler(ValidationError)
+    async def pydantic_validation_exception_handler(
+        request: Request, exc: ValidationError
+    ):
+        """Handle Pydantic model validation errors"""
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "detail": "Pydantic Validation Error",
+                "errors": exc.errors(),
+                "message": "Data validation failed.",
+            },
         )
 
     # Include API router
@@ -45,24 +143,87 @@ def create_application() -> FastAPI:
 app = create_application()
 
 
-@app.get("/")
+@app.get("/", tags=["Root"])
 async def root():
-    """Root endpoint"""
-    return {"message": "Welcome to FastAPI TODO App"}
+    """
+    Root endpoint with enhanced information about the Pydantic-powered API
+    """
+    return {
+        "message": "🚀 Welcome to Enhanced FastAPI TODO App with Pydantic Models!",
+        "version": settings.VERSION,
+        "docs": "/docs",
+        "redoc": "/redoc",
+        "api_base": settings.API_V1_STR,
+        "features": [
+            "Pydantic data validation",
+            "Advanced filtering",
+            "Statistics dashboard",
+            "Bulk operations",
+            "Priority management",
+            "Tag-based organization",
+        ],
+    }
 
 
-@app.get("/health")
+@app.get("/health", tags=["Health"])
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy"}
+    """
+    Enhanced health check endpoint with system information
+    """
+    from datetime import datetime
+
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "version": settings.VERSION,
+        "environment": settings.ENVIRONMENT,
+        "pydantic_enabled": True,
+        "database": "connected" if settings.DATABASE_URL else "not configured",
+    }
+
+
+@app.get("/info", tags=["System"])
+async def app_info():
+    """
+    Application information endpoint showcasing Pydantic integration
+    """
+    return {
+        "application": {
+            "name": settings.PROJECT_NAME,
+            "version": settings.VERSION,
+            "environment": settings.ENVIRONMENT,
+        },
+        "technology_stack": {
+            "framework": "FastAPI",
+            "validation": "Pydantic V2",
+            "database": "SQLAlchemy + SQLite/PostgreSQL",
+            "package_manager": "UV",
+        },
+        "pydantic_models": {
+            "TodoCreate": "Enhanced todo creation with validation",
+            "TodoUpdate": "Flexible todo updates",
+            "TodoResponse": "Comprehensive todo data",
+            "TodoFilter": "Advanced filtering capabilities",
+            "TodoStats": "Analytics and statistics",
+            "TodoStatus": "Status management enum",
+            "TodoPriority": "Priority level enum",
+        },
+        "api_endpoints": f"{settings.API_V1_STR}/todos/",
+        "documentation": {
+            "swagger": "/docs",
+            "redoc": "/redoc",
+            "openapi": f"{settings.API_V1_STR}/openapi.json",
+        },
+    }
 
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
-        "main:app",
+        "fastapi_todo_app.main:app",
         host="0.0.0.0",
         port=8000,
         reload=True,
+        log_level=settings.LOG_LEVEL.lower(),
     )
