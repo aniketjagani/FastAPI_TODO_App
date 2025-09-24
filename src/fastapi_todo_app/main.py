@@ -14,7 +14,7 @@ import logging
 
 from .api.v1.api import api_router
 from .core.config import settings
-from .db.database import create_tables  # SQLite for TODOs
+from .db.database import create_tables as create_todo_tables  # PostgreSQL for TODOs
 from .employees.db.database import (
     create_tables as create_employee_tables,
 )  # PostgreSQL for Employees
@@ -32,11 +32,11 @@ async def lifespan(app: FastAPI):
     Application lifespan handler for startup and shutdown events
     """
     # Startup
-    logger.info("🚀 Starting FastAPI TODO & Employee Application with Pydantic models")
+    logger.info("🚀 Starting FastAPI TODO & Employee Application with PostgreSQL")
     try:
-        # Create SQLite tables for TODOs
-        create_tables()
-        logger.info("✅ SQLite TODO tables created successfully")
+        # Create PostgreSQL tables for TODOs
+        create_todo_tables()
+        logger.info("✅ PostgreSQL TODO tables created successfully")
 
         # Create PostgreSQL tables for Employees
         create_employee_tables()
