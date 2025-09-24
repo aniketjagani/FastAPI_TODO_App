@@ -13,12 +13,14 @@ import time
 import logging
 
 from .api.v1.api import api_router
-from .core.config import settings
-from .db.database import create_tables as create_todo_tables  # PostgreSQL for TODOs
-from .employees.db.database import (
+from .shared.core.config import settings
+from .domains.todos.db.database import (
+    create_tables as create_todo_tables,
+)  # PostgreSQL for TODOs
+from .domains.employees.db.database import (
     create_tables as create_employee_tables,
 )  # PostgreSQL for Employees
-from .schemas.todo import TodoStats
+from .domains.todos.schemas.todo import TodoStats
 
 
 # Configure logging
