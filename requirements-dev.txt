@@ -1,0 +1,71 @@
+# Development and optimization dependencies for FastAPI TODO App
+# Install these for enhanced development experience and production optimizations
+
+# ===========================================
+# ASYNC DATABASE DRIVERS
+# ===========================================
+asyncpg==0.29.0              # Async PostgreSQL driver for better performance
+aiopg==1.4.0                  # Alternative async PostgreSQL driver
+
+# ===========================================
+# CACHING & PERFORMANCE
+# ===========================================
+redis==5.0.1                 # Redis client for caching
+hiredis==2.2.3                # High-performance Redis parser
+aiocache==0.12.2              # Async caching framework
+
+# ===========================================
+# MONITORING & OBSERVABILITY
+# ===========================================
+psutil==5.9.6                 # System monitoring
+prometheus-client==0.19.0     # Prometheus metrics
+opentelemetry-api==1.21.0     # Distributed tracing
+opentelemetry-sdk==1.21.0
+opentelemetry-instrumentation-fastapi==0.42b0
+
+# ===========================================
+# RATE LIMITING & SECURITY
+# ===========================================
+slowapi==0.1.9                # Rate limiting for FastAPI
+python-jose[cryptography]==3.3.0  # JWT token handling
+passlib[bcrypt]==1.7.4         # Password hashing
+python-multipart==0.0.6        # File upload support
+
+# ===========================================
+# TESTING & DEVELOPMENT
+# ===========================================
+pytest==7.4.3                 # Testing framework
+pytest-asyncio==0.21.1        # Async testing support
+pytest-cov==4.1.0             # Coverage reporting
+httpx==0.25.2                  # Async HTTP client for testing
+factory-boy==3.3.0            # Test data generation
+
+# ===========================================
+# CODE QUALITY
+# ===========================================
+black==23.11.0                 # Code formatting
+isort==5.12.0                  # Import sorting
+flake8==6.1.0                  # Linting
+mypy==1.7.1                    # Type checking
+bandit==1.7.5                  # Security linting
+
+# ===========================================
+# DOCUMENTATION
+# ===========================================
+mkdocs==1.5.3                 # Documentation generator
+mkdocs-material==9.4.8        # Material theme for docs
+
+# ===========================================
+# PRODUCTION UTILITIES
+# ===========================================
+gunicorn==21.2.0               # WSGI server
+uvloop==0.19.0                 # High-performance event loop
+httptools==0.6.1               # Fast HTTP parsing
+
+# ===========================================
+# OPTIONAL INTEGRATIONS
+# ===========================================
+celery==5.3.4                  # Background task queue
+flower==2.0.1                  # Celery monitoring
+boto3==1.34.0                  # AWS SDK for file storage
+sentry-sdk==1.38.0             # Error tracking

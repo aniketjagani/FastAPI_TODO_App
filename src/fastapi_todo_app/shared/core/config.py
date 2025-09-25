@@ -56,6 +56,20 @@ class Settings(BaseSettings):
 
     # Logging
     LOG_LEVEL: str = "INFO"
+    LOG_TO_FILE: bool = False
+
+    # Cache settings
+    REDIS_URL: Optional[str] = None
+    CACHE_DEFAULT_TTL: int = 300
+
+    # Rate limiting
+    RATE_LIMIT_PER_MINUTE: int = 100
+    USER_RATE_LIMIT_PER_MINUTE: int = 1000
+
+    # Monitoring
+    ENABLE_METRICS: bool = True
+    SLOW_QUERY_THRESHOLD: float = 1.0
+    ENABLE_TRACING: bool = False
 
 
 settings = Settings()

@@ -1,5 +1,5 @@
 """
-Enhanced FastAPI TODO Application Entry Point with Pydantic Integration
+Enhanced FastAPI TODO Application Entry Point with Optimizations
 """
 
 from contextlib import asynccontextmanager
@@ -11,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 import time
 import logging
+import os
 
 from .api.v1.api import api_router
 from .shared.core.config import settings
@@ -22,9 +23,24 @@ from .domains.employees.db.database import (
 )  # PostgreSQL for Employees
 from .domains.todos.schemas.todo import TodoStats
 
+# Import new optimization features
+from .shared.database.async_db import initialize_databases, close_databases
+from .shared.utils.caching import cache_service
+from .shared.utils.rate_limiting import rate_limit_service
 
-# Configure logging
-logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
+# Configure enhanced logging
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        (
+            logging.FileHandler("app.log")
+            if settings.LOG_TO_FILE
+            else logging.NullHandler()
+        ),
+    ],
+)
 logger = logging.getLogger(__name__)
 
 
@@ -34,7 +50,7 @@ async def lifespan(app: FastAPI):
     Application lifespan handler for startup and shutdown events
     """
     # Startup
-    logger.info("🚀 Starting FastAPI TODO & Employee Application with PostgreSQL")
+    logger.info("🚀 Starting FastAPI TODO & Employee Application with optimizations")
     try:
         # Create PostgreSQL tables for TODOs
         create_todo_tables()
@@ -43,14 +59,40 @@ async def lifespan(app: FastAPI):
         # Create PostgreSQL tables for Employees
         create_employee_tables()
         logger.info("✅ PostgreSQL Employee tables created successfully")
+
+        # Initialize async database connections
+        todos_db_url = os.getenv("TODOS_DATABASE_URL")
+        employees_db_url = os.getenv("EMPLOYEES_DATABASE_URL")
+
+        if todos_db_url and employees_db_url:
+            await initialize_databases(todos_db_url, employees_db_url)
+            logger.info("✅ Async database connections initialized")
+        else:
+            logger.warning(
+                "⚠️ Async database URLs not configured, using sync connections"
+            )
+
+        # Initialize cache service with Redis if available
+        redis_url = os.getenv("REDIS_URL")
+        if redis_url:
+            cache_service.__init__(redis_url=redis_url)
+            logger.info("✅ Redis cache initialized")
+        else:
+            logger.warning("⚠️ Redis URL not configured, using in-memory cache")
+
     except Exception as e:
-        logger.error(f"❌ Error creating database tables: {e}")
+        logger.error(f"❌ Error during application startup: {e}")
         raise
 
     yield
 
     # Shutdown
     logger.info("👋 Shutting down FastAPI TODO Application")
+    try:
+        await close_databases()
+        logger.info("✅ Database connections closed")
+    except Exception as e:
+        logger.error(f"❌ Error during shutdown: {e}")
 
 
 def create_application() -> FastAPI:
