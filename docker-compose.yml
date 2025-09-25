@@ -1,0 +1,237 @@
+version: '3.8'
+
+services:
+  # FastAPI Application
+  fastapi-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: fastapi-todo-app
+    ports:
+      - "8000:8000"
+    environment:
+      # Database Configuration
+      - DB_HOST=postgres-todos
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=password123
+      - DB_NAME=todos_db
+      - EMPLOYEES_DB_NAME=employees_db
+      
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379/0
+      
+      # Application Configuration
+      - LOG_LEVEL=INFO
+      - LOG_TO_FILE=true
+      - ENVIRONMENT=production
+      
+      # Security Configuration
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
+      - CORS_ORIGINS=http://localhost:3000,https://yourdomain.com
+      
+      # Performance Configuration
+      - WORKERS=4
+      - MAX_CONNECTIONS=100
+      - CACHE_TTL=300
+      
+      # Docker specific
+      - WAIT_FOR_DB=true
+      - RUN_MIGRATIONS=true
+      - INIT_DATA=false
+    
+    depends_on:
+      postgres-todos:
+        condition: service_healthy
+      postgres-employees:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    
+    volumes:
+      - app-logs:/app/logs
+      - app-data:/app/data
+    
+    networks:
+      - app-network
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "python", "/healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL for TODOs
+  postgres-todos:
+    image: postgres:16-alpine
+    container_name: postgres-todos-db
+    environment:
+      - POSTGRES_DB=todos_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password123
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    
+    ports:
+      - "5432:5432"
+    
+    volumes:
+      - postgres-todos-data:/var/lib/postgresql/data
+      - ./scripts/init-todos-db.sql:/docker-entrypoint-initdb.d/init-todos-db.sql
+    
+    networks:
+      - app-network
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d todos_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL for Employees
+  postgres-employees:
+    image: postgres:16-alpine
+    container_name: postgres-employees-db
+    environment:
+      - POSTGRES_DB=employees_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password123
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    
+    ports:
+      - "5433:5432"
+    
+    volumes:
+      - postgres-employees-data:/var/lib/postgresql/data
+      - ./scripts/init-employees-db.sql:/docker-entrypoint-initdb.d/init-employees-db.sql
+    
+    networks:
+      - app-network
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d employees_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: redis-cache
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    
+    ports:
+      - "6379:6379"
+    
+    volumes:
+      - redis-data:/data
+    
+    networks:
+      - app-network
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Nginx Reverse Proxy (Optional)
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/ssl:/etc/nginx/ssl:ro
+      - nginx-cache:/var/cache/nginx
+    
+    depends_on:
+      - fastapi-app
+    
+    networks:
+      - app-network
+    
+    restart: unless-stopped
+
+  # Prometheus (Monitoring)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    
+    networks:
+      - app-network
+    
+    restart: unless-stopped
+
+  # Grafana (Dashboards)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    
+    networks:
+      - app-network
+    
+    restart: unless-stopped
+
+volumes:
+  postgres-todos-data:
+    driver: local
+  postgres-employees-data:
+    driver: local
+  redis-data:
+    driver: local
+  app-logs:
+    driver: local
+  app-data:
+    driver: local
+  nginx-cache:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

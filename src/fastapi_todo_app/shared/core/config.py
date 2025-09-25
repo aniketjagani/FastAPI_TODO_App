@@ -71,5 +71,42 @@ class Settings(BaseSettings):
     SLOW_QUERY_THRESHOLD: float = 1.0
     ENABLE_TRACING: bool = False
 
+    # Advanced Features
+    ENABLE_AUTHENTICATION: bool = True
+    ENABLE_API_KEYS: bool = True
+    JWT_SECRET_KEY: str = "jwt-secret-key-change-this-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # Export/Import
+    MAX_EXPORT_RECORDS: int = 100000
+    EXPORT_FILE_TTL_HOURS: int = 24
+
+    # Search Configuration
+    ENABLE_FUZZY_SEARCH: bool = True
+    SEARCH_RESULTS_LIMIT: int = 1000
+
+    # Bulk Operations
+    MAX_BULK_OPERATIONS: int = 1000
+    BULK_OPERATION_TIMEOUT: int = 300  # 5 minutes
+
+    # Security Settings
+    PASSWORD_MIN_LENGTH: int = 8
+    MAX_LOGIN_ATTEMPTS: int = 5
+    ACCOUNT_LOCKOUT_DURATION: int = 900  # 15 minutes
+
+    # Performance Settings
+    MAX_CONCURRENT_REQUESTS: int = 100
+    REQUEST_TIMEOUT: int = 30
+
+    # Feature Flags
+    FEATURE_ADVANCED_ANALYTICS: bool = True
+    FEATURE_EXPORT_IMPORT: bool = True
+    FEATURE_BULK_OPERATIONS: bool = True
+
+    # Application naming for better organization
+    APP_NAME: str = "FastAPI TODO & Employee Management System"
+
 
 settings = Settings()

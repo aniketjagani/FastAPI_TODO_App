@@ -3,7 +3,7 @@ Performance monitoring and metrics middleware
 """
 
 from fastapi import Request, Response
-from fastapi.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 import time
 import logging
 import asyncio

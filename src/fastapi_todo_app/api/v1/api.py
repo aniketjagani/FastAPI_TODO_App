@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from ...domains.todos.api import todos_router
 from ...domains.employees.api import employees_router
 from .health import router as health_router
+from .advanced import router as advanced_router
 
 api_router = APIRouter()
 
@@ -16,3 +17,6 @@ api_router.include_router(employees_router, prefix="/employees", tags=["employee
 
 # Health check endpoints
 api_router.include_router(health_router, tags=["health"])
+
+# Advanced feature endpoints
+api_router.include_router(advanced_router, prefix="/advanced", tags=["advanced"])

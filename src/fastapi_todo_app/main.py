@@ -23,10 +23,19 @@ from .domains.employees.db.database import (
 )  # PostgreSQL for Employees
 from .domains.todos.schemas.todo import TodoStats
 
-# Import new optimization features
+# Import optimization features
 from .shared.database.async_db import initialize_databases, close_databases
 from .shared.utils.caching import cache_service
 from .shared.utils.rate_limiting import rate_limit_service
+
+# Import new enhancement features
+from .shared.security.authentication import SecurityMiddleware, security_manager
+from .shared.monitoring.observability import (
+    ObservabilityMiddleware,
+    metrics_collector,
+    alert_manager,
+)
+from .shared.features.advanced_api import advanced_api_service
 
 # Configure enhanced logging
 logging.basicConfig(
@@ -80,6 +89,19 @@ async def lifespan(app: FastAPI):
         else:
             logger.warning("⚠️ Redis URL not configured, using in-memory cache")
 
+        # Initialize background task manager
+        from .shared.utils.background_tasks import task_manager
+
+        await task_manager.start()
+        logger.info("✅ Background task manager started")
+
+        # Schedule periodic cleanup tasks
+        from .shared.utils.background_tasks import TaskPriority
+
+        await task_manager.add_task(
+            "cache_cleanup", cache_service.clear, priority=TaskPriority.LOW
+        )
+
     except Exception as e:
         logger.error(f"❌ Error during application startup: {e}")
         raise
@@ -89,6 +111,13 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("👋 Shutting down FastAPI TODO Application")
     try:
+        # Stop background task manager
+        from .shared.utils.background_tasks import task_manager
+
+        await task_manager.stop()
+        logger.info("✅ Background task manager stopped")
+
+        # Close database connections
         await close_databases()
         logger.info("✅ Database connections closed")
     except Exception as e:
@@ -148,13 +177,68 @@ def create_application() -> FastAPI:
             allowed_hosts=["localhost", "127.0.0.1", "*.herokuapp.com"],
         )
 
-    # Add timing middleware for performance monitoring
+    # Add comprehensive performance and monitoring middleware
+    from .shared.middleware.performance import (
+        PerformanceMiddleware,
+        DatabaseMetricsMiddleware,
+        CacheMetricsMiddleware,
+    )
+    from .shared.utils.rate_limiting import (
+        rate_limit_service,
+        RateLimit,
+        RateLimitStrategy,
+    )
+
+    # Performance monitoring middleware
+    app.add_middleware(
+        PerformanceMiddleware, slow_request_threshold=settings.SLOW_QUERY_THRESHOLD
+    )
+    app.add_middleware(DatabaseMetricsMiddleware)
+    app.add_middleware(CacheMetricsMiddleware)
+
+    # Add advanced monitoring and security middleware
+    app.add_middleware(ObservabilityMiddleware, metrics_collector=metrics_collector)
+    app.add_middleware(SecurityMiddleware)
+
+    # Rate limiting middleware
     @app.middleware("http")
-    async def add_process_time_header(request: Request, call_next):
-        start_time = time.time()
+    async def rate_limiting_middleware(request: Request, call_next):
+        # Skip rate limiting for health checks and docs
+        if request.url.path in ["/health", "/docs", "/redoc", "/openapi.json"]:
+            return await call_next(request)
+
+        # Determine rate limit based on endpoint
+        if request.url.path.startswith("/api/v1/auth"):
+            rate_limit = RateLimit(
+                requests=10, window=60, strategy=RateLimitStrategy.SLIDING_WINDOW
+            )
+        else:
+            rate_limit = RateLimit(requests=settings.RATE_LIMIT_PER_MINUTE, window=60)
+
+        # Get client identifier
+        identifier = rate_limit_service.get_identifier(request)
+
+        # Check rate limit
+        result = rate_limit_service.check_rate_limit(identifier, rate_limit)
+
+        if not result.allowed:
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": "Rate limit exceeded",
+                    "retry_after": result.retry_after,
+                },
+                headers=(
+                    {"Retry-After": str(result.retry_after)}
+                    if result.retry_after
+                    else {}
+                ),
+            )
+
+        # Add rate limit headers to response
         response = await call_next(request)
-        process_time = time.time() - start_time
-        response.headers["X-Process-Time"] = str(process_time)
+        response.headers["X-RateLimit-Remaining"] = str(result.remaining)
+        response.headers["X-RateLimit-Reset"] = str(int(result.reset_time))
         return response
 
     # Set CORS middleware

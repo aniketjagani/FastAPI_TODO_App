@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 
 from ...shared.database.async_db import todos_db, employees_db
 from ...shared.utils.caching import cache_service, cache_stats
+from ...shared.utils.background_tasks import task_manager
+from ...shared.utils.database_optimization import query_optimizer
 
 router = APIRouter()
 
@@ -40,7 +42,7 @@ async def detailed_health_check() -> Dict[str, Any]:
         "services": {},
         "system": {}
     }
-    
+
     # Check database connectivity
     try:
         if todos_db:
@@ -55,7 +57,7 @@ async def detailed_health_check() -> Dict[str, Any]:
                 "status": "not_configured",
                 "message": "Async database not initialized"
             }
-            
+
         if employees_db:
             employees_healthy = await employees_db.health_check()
             employees_pool = employees_db.get_pool_status()
@@ -68,35 +70,65 @@ async def detailed_health_check() -> Dict[str, Any]:
                 "status": "not_configured",
                 "message": "Async database not initialized"
             }
-            
+
     except Exception as e:
         health_data["services"]["databases"] = {
             "status": "error",
             "error": str(e)
         }
         health_data["status"] = "degraded"
-    
+
     # Check cache service
     try:
         test_key = "health_check_test"
         await cache_service.set(test_key, "test_value", ttl=30)
         cached_value = await cache_service.get(test_key)
-        
+
         health_data["services"]["cache"] = {
             "status": "healthy" if cached_value == "test_value" else "unhealthy",
             "stats": cache_stats.to_dict()
         }
-        
+
         # Cleanup test key
         await cache_service.delete(test_key)
-        
+
     except Exception as e:
         health_data["services"]["cache"] = {
             "status": "error",
             "error": str(e)
         }
         health_data["status"] = "degraded"
-    
+
+    # Check background task manager
+    try:
+        task_status = await task_manager.get_queue_status()
+        health_data["services"]["background_tasks"] = {
+            "status": "healthy" if task_status["is_running"] else "stopped",
+            "queue_size": task_status["queue_size"],
+            "active_workers": task_status["active_workers"],
+            "running_tasks": task_status["running_tasks"],
+            "task_counts": task_status["task_counts"],
+        }
+    except Exception as e:
+        health_data["services"]["background_tasks"] = {
+            "status": "error",
+            "error": str(e),
+        }
+        health_data["status"] = "degraded"
+
+    # Add query performance metrics
+    try:
+        query_stats = query_optimizer.get_query_stats()
+        health_data["services"]["database_performance"] = {
+            "status": "healthy",
+            "metrics": query_stats,
+        }
+    except Exception as e:
+        health_data["services"]["database_performance"] = {
+            "status": "error",
+            "error": str(e),
+        }
+
     # System metrics
     try:
         process = psutil.Process(os.getpid())
@@ -113,12 +145,12 @@ async def detailed_health_check() -> Dict[str, Any]:
             "status": "error",
             "error": str(e)
         }
-    
+
     # Determine overall status
     service_statuses = [service.get("status") for service in health_data["services"].values()]
     if "error" in service_statuses or "unhealthy" in service_statuses:
         health_data["status"] = "degraded"
-    
+
     return health_data
 
 
@@ -167,3 +199,59 @@ async def liveness_check() -> JSONResponse:
         status_code=status.HTTP_200_OK,
         content={"status": "alive", "timestamp": datetime.now(timezone.utc).isoformat()}
     )
+
+
+@router.get("/health/tasks", tags=["Background Tasks"])
+async def get_task_queue_status() -> Dict[str, Any]:
+    """
+    Get background task queue status
+    """
+    return await task_manager.get_queue_status()
+
+
+@router.get("/health/tasks/{task_id}", tags=["Background Tasks"])
+async def get_task_status(task_id: str) -> Dict[str, Any]:
+    """
+    Get specific background task status
+    """
+    task_status = await task_manager.get_task_status(task_id)
+    if not task_status:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"error": f"Task {task_id} not found"},
+        )
+    return task_status
+
+
+@router.delete("/health/tasks/{task_id}", tags=["Background Tasks"])
+async def cancel_task(task_id: str) -> Dict[str, Any]:
+    """
+    Cancel a background task
+    """
+    success = await task_manager.cancel_task(task_id)
+    if not success:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"error": f"Task {task_id} not found"},
+        )
+    return {"message": f"Task {task_id} cancelled successfully"}
+
+
+@router.get("/health/performance", tags=["Performance"])
+async def get_performance_metrics() -> Dict[str, Any]:
+    """
+    Get comprehensive performance metrics
+    """
+    return {
+        "query_performance": query_optimizer.get_query_stats(),
+        "slow_queries": [
+            {
+                "query": q.query,
+                "execution_time": q.execution_time,
+                "timestamp": q.timestamp.isoformat(),
+            }
+            for q in query_optimizer.get_slow_queries()[-10:]  # Last 10 slow queries
+        ],
+        "cache_performance": cache_stats.to_dict(),
+        "background_tasks": await task_manager.get_queue_status(),
+    }

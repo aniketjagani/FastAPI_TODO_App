@@ -4,7 +4,7 @@ Shared middleware components
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from fastapi.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 import time
 import logging
 
